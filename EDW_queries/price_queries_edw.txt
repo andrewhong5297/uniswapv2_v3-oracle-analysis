@@ -1,0 +1,47 @@
+-- --chainlink 
+-- SELECT * --get curr_value for aggregator addresses to use in next query
+-- FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.storage_diffs 
+-- WHERE contract = lower('0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419') --ETH/USDC proxy aggregator, ref https://data.chain.link/popular 
+-- AND location LIKE '4[%].0'
+-- ORDER BY timestamp ASC;
+
+SELECT 
+    distinct 
+    timestamp, 
+    block,
+    udf.public.hextoint(return_value)/1e8 as eth_price
+FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls 
+WHERE from_address= lower('0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419') --ETH/USDC proxy aggregator
+AND to_address IN ('0x37bc7498f4ff12c19678ee8fe19d713b87f6a9e6', '0xd3fcd40153e56110e6eeae13e12530e26c9cb4fd', '0xb103ede8acd6f0c106b7a5772e9d24e34f5ebc2c', '0xf79d6afbb6da890132f9d7c355e3015f15f3406f', '0xc7a37b03690fb9f41b5c5af8131735c7275446') --historical phaseaggregators for ETH/USDC as of 3/1/2022
+AND substring(call_data,1,10) = '0x50d25bcd' --funcsig for getting latestRoundData
+AND block >= 12381343
+AND status = 1
+ORDER BY 1 ASC;
+
+-- --uniswap v2
+SELECT 
+    block, 
+    timestamp, 
+    -- location, 
+    -- tx_hash, 
+    udf.public.hextoint(curr_value) as cumulative_last
+FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.storage_diffs 
+WHERE contract = lower('0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc')
+AND location = '10' -- token1 price slot, which is WETH
+AND block >= 12381343
+AND status = 1
+ORDER BY block, timestamp, order_index;
+
+-- --uniswap v3
+SELECT timestamp, 
+       location::integer - 8 as index, 
+       -- substr(curr_value, 3, 2) = '0x01' as initialized,
+       -- hextoint(substr(curr_value, 5, 40)) as secondsPerLiquidityCumulativeX128, 
+       hextoint(substr(curr_value, 45, 14)) as tickCumulative
+       -- hextoint(substr(curr_value, 59, 8)) as blockTimestamp
+FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.storage_diffs 
+WHERE contract = lower('0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8')
+      and location not like '_[%' and location::integer > 8
+      AND block >= 12381343 
+      AND status = 1
+ORDER BY block asc, order_index asc;
