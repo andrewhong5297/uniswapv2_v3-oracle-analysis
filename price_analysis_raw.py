@@ -10,6 +10,8 @@ add link to article in jupyter notebook on how to work with storage data.
 """
 
 import pandas as pd 
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # used for TWAP time framing on uniswap data. Set it to <None> if you want the fastest TWAP.
 min_floor = '5min' #None
@@ -72,21 +74,9 @@ chainlink["datetime"] = pd.to_datetime(chainlink['TIMESTAMP'])
 chainlink = chainlink[chainlink["ETH_PRICE"] != 0] #for some reason EDW shows some 70 values as 0, maybe a read error?
 chainlink.drop_duplicates(subset='TIMESTAMP', keep='last', inplace=True)
 chainlink.rename(columns={'ETH_PRICE': 'chainlink_ETH_price'}, inplace=True)
-
-unique_times = set().union(
-                        set(chainlink["TIMESTAMP"]), 
-                        set(uni_v2["TIMESTAMP"]),
-                        set(uni_v3_03["TIMESTAMP"])
-                        )
-
-chainlink = chainlink.set_index('TIMESTAMP').reindex(unique_times).reset_index().reindex(columns=chainlink.columns)
-chainlink = chainlink.sort_values(by='TIMESTAMP', ascending=True)
 # chainlink.plot(kind="line", x='datetime', y = 'chainlink_ETH_price')
 
 """joining all and plotting"""
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 notionals = ["chainlink_ETH_price", "uni_v2_ETH_price", "uni_v3_ETH_price"] 
 comps = ["univ3_chainlink_diff", "univ2_chainlink_diff", "univ2_chainlink_ratio","univ3_chainlink_ratio"]
 
@@ -164,43 +154,59 @@ add some commentary on top users of each oracle.
 """
 
 time_univ3 = pd.read_csv(r'oracle_reads/daily_reads_uniswapv3.csv')
-time_univ3.columns = ["datetime", "uni_v3_unique_contracts", "uni_v3_total_calls"]
+time_univ3.columns = ["datetime", "daily total oracle calls", "daily unique contracts (calling oracle)"]
 time_univ3["datetime"] = pd.to_datetime(time_univ3['datetime'])
 
 time_chainlink = pd.read_csv(r'oracle_reads/daily_reads_chainlink.csv')
-time_chainlink.columns = ["datetime", "chainlink_unique_contracts", "chainlink_total_calls"]
+time_chainlink.columns = ["datetime", "daily total oracle calls", "daily unique contracts (calling oracle)"]
 time_chainlink["datetime"] = pd.to_datetime(time_chainlink['datetime'])
 
-merged_time = pd.merge(time_chainlink, time_univ3,left_on = 'datetime', right_on = 'datetime', how = 'outer')
-
 fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(10,15))
-merged_time.plot(kind="line", 
-                    x = "datetime", 
-                    y = "uni_v3_total_calls",
-                    color = 'orange',
-                    title = "Uniswap TWAP vs Chainlink Agg ETH/USDC Price Oracles: Usage",
-                    ax = ax1)
-
 ax1twin = ax1.twinx()
-merged_time.plot(kind="line", 
+ax2twin = ax2.twinx()
+
+time_univ3.plot(kind="line", 
                     x = "datetime", 
-                    y = "uni_v3_unique_contracts",
+                    y = "daily total oracle calls",
+                    color = 'teal',
+                    title = "Uniswap TWAP ETH/USDC: Daily total calls and unique contracts making calls",
+                    # legend=False,
                     ax = ax1twin)
 
-ax1.set(ylabel="# oracle calls")
-ax1twin.set(ylabel="# contract addresses making calls)")
-
-merged_time.plot(kind="line", 
+time_univ3.plot(kind="line", 
                     x = "datetime", 
-                    y = "chainlink_total_calls",
-                    color = 'orange',
-                    ax = ax2)
+                    y = "daily unique contracts (calling oracle)",
+                    color = "darkblue",
+                    legend=False,
+                    ax = ax1)
 
-ax2twin = ax2.twinx()
-merged_time.plot(kind="line", 
+ax1.set(ylabel="daily total oracle calls")
+ax1.tick_params(axis='y', colors='teal')
+ax1.yaxis.label.set_color('teal')
+ax1twin.set(ylabel="daily unique contracts (calling oracle)")
+ax1twin.tick_params(axis='y', colors='darkblue')
+ax1twin.yaxis.label.set_color('darkblue')
+
+
+time_chainlink.plot(kind="line", 
                     x = "datetime", 
-                    y = "chainlink_unique_contracts",
+                    y = "daily total oracle calls",
+                    title = "Chainlink Data Feed ETH/USDC: Daily total calls and unique contracts making calls",
+                    color = 'teal',
+                    # legend=False,
                     ax = ax2twin)
 
-ax2.set(ylabel="# oracle calls")
-ax2twin.set(ylabel="# contract addresses making calls)")
+time_chainlink.plot(kind="line", 
+                    x = "datetime", 
+                    y = "daily unique contracts (calling oracle)",
+                    color = 'darkblue',
+                    legend=False,
+                    ax = ax2)
+
+ax2.set(ylabel="daily total oracle calls")
+ax2.tick_params(axis='y', colors='teal')
+ax2.yaxis.label.set_color('teal')
+ax2twin.set(ylabel="daily unique contracts (calling oracle)")
+ax2twin.tick_params(axis='y', colors='darkblue')
+ax2twin.yaxis.label.set_color('darkblue')
+
