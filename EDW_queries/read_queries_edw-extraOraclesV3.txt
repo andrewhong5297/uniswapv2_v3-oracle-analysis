@@ -1,0 +1,66 @@
+-- -- both v3 oracles call the pair oracle on each interaction. so we need the calls where ETH/USDC is called
+-- -- oracle 0x65d66c76447ccb45daf1e8044e918fa786a483a1 is mainly called by 0x64187ae08781b09368e6253f9e94951243a493d5
+-- SELECT 
+--     call.from_address , 
+--     COUNT(distinct call.tx_hash) as total_times_queried
+-- FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call
+-- WHERE to_address = lower('0x65d66c76447ccb45daf1e8044e918fa786a483a1')
+-- AND substring(call_data,1,74) = '0xcce79bd50000000000000000000000008ad599c3a0ff1de082011efddc58f1908eb6e6d8' --getTwap + pair address for ETH/USDC
+--     AND block >= 12381343
+--     AND success = true
+-- GROUP BY 1
+-- ORDER BY total_times_queried DESC
+-- LIMIT 100;
+
+--daily instead
+SELECT 
+    date_trunc('day', call.timestamp) as day, 
+    COUNT(distinct call.from_address) as distinct_contract_sources,
+    COUNT(distinct call.tx_hash) as daily_queries
+FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call
+WHERE to_address = lower('0x65d66c76447ccb45daf1e8044e918fa786a483a1')
+AND substring(call_data,1,74) = '0xcce79bd50000000000000000000000008ad599c3a0ff1de082011efddc58f1908eb6e6d8' --getTwap + pair address for ETH/USDC
+    AND block >= 12381343
+    AND success = true
+GROUP BY 1;
+
+-- 0x0f1f5a87f99f0918e6c81f16e59f3518698221ff --cross pool oracle, this one uses an internal function to _fetchTwap, so I need to do the more costly pair_calls CTE filter first.
+with 
+    pair_calls as (
+    SELECT 
+        distinct read.tx_hash 
+    FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.storage_reads read 
+    LEFT JOIN EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call 
+        ON call.tx_hash = read.tx_hash AND call.call_id = read.call_id
+    WHERE contract = lower('0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8')
+        AND read.location not like '_[%' and location::integer > 8
+        AND read.status = 1
+        AND read.block >= 12381343
+        AND call.from_address = lower('0x0f1f5a87f99f0918e6c81f16e59f3518698221ff')
+    )
+    
+SELECT 
+    call.from_address , 
+    COUNT(distinct call.tx_hash) as total_times_queried
+FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call
+WHERE to_address = lower('0x0f1f5a87f99f0918e6c81f16e59f3518698221ff')
+    AND block >= 12381343
+    AND success = true
+    AND EXISTS (SELECT 1 FROM pair_calls ii --transactions where the ETH/USDC pair was called
+           WHERE ii.tx_hash = call.tx_hash)
+GROUP BY 1
+ORDER BY total_times_queried DESC
+LIMIT 100;
+
+-- -- daily queries
+-- SELECT 
+--     date_trunc('day', call.timestamp) as day, 
+--     COUNT(distinct call.from_address) as distinct_contract_sources,
+--     COUNT(distinct call.tx_hash) as daily_queries
+-- FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call
+-- WHERE to_address = lower('0x0f1f5a87f99f0918e6c81f16e59f3518698221ff')
+--     AND block >= 12381343
+--     AND success = true
+--     AND EXISTS (SELECT 1 FROM pair_calls ii --transactions where the ETH/USDC pair was called
+--            WHERE ii.tx_hash = call.tx_hash)
+-- GROUP BY 1;

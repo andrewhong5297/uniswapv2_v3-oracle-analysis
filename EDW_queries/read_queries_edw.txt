@@ -26,7 +26,19 @@ GROUP BY 1
 ORDER BY 1 asc;
 
 
--- -- uniswap v3 (v2 didn't have oracle storage)
+-- -- uniswap v3
+-- query top contracts using calls instead of txs, we count distinct tx_hash since otherwise reads might be cheating with multiple reads per oracle use. 
+WITH 
+    --ignore calls that affect observation state as that doesn't count as oracle usage
+    ignore_interactions as (
+        SELECT 
+            *
+            --distinct tx_hash
+        FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls
+        WHERE to_address = lower('0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8')
+        AND substring(call_data,1,10) IN ('0x3c8a7d8d','0xa34123a7','0x128acb08','0x490e6cbc') --mint, burn, swap, flash
+    )
+
 -- query top contracts using calls instead of txs, we count distinct tx_hash since otherwise reads might be cheating with multiple reads per oracle use. 
 SELECT 
     call.from_address , 
@@ -38,21 +50,71 @@ WHERE contract = lower('0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8')
     AND read.location not like '_[%' and location::integer > 8
     AND read.status = 1
     AND read.block >= 12381343
+    AND NOT EXISTS (SELECT 1 FROM ignore_interactions ii --ignore non-oracle interactions
+               WHERE ii.tx_hash = read.tx_hash)
 GROUP BY 1
 ORDER BY total_times_queried DESC
 LIMIT 100;
 
--- -- daily queries
+-- -- -- daily queries
+-- SELECT 
+--     date_trunc('day', call.timestamp) as day, 
+--     COUNT(distinct call.from_address) as distinct_contract_sources,
+--     COUNT(distinct call.tx_hash) as daily_queries
+-- FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.storage_reads read 
+-- LEFT JOIN EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call 
+--     ON call.tx_hash = read.tx_hash AND call.call_id = read.call_id
+-- WHERE contract = lower('0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8')
+--     AND read.location not like '_[%' and location::integer > 8
+--     AND read.status = 1
+--     AND read.block >= 12381343
+    -- AND NOT EXISTS (SELECT 1 FROM ignore_interactions ii --ignore non-oracle interactions
+               -- WHERE ii.tx_hash = read.tx_hash)
+-- GROUP BY 1
+-- ORDER BY 1 asc;
+
+-- -- uniswap v2 
+WITH 
+    --ignore calls that affect observation state as that doesn't count as oracle usage
+    ignore_interactions as (
+        SELECT 
+            *
+            --distinct tx_hash
+        FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls
+        WHERE to_address = lower('0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc')
+        AND substring(call_data,1,10) IN ('0x6a627842','0x89afcb44','0x022c0d9f') --mint, burn, swap
+    )
+
+-- query top contracts using calls instead of txs, we count distinct tx_hash since otherwise reads might be cheating with multiple reads per oracle use. 
 SELECT 
-    date_trunc('day', call.timestamp) as day, 
-    COUNT(distinct call.from_address) as distinct_contract_sources,
-    COUNT(distinct call.tx_hash) as daily_queries
+    call.from_address , 
+    COUNT(distinct call.tx_hash) as total_times_queried
 FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.storage_reads read 
 LEFT JOIN EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call 
     ON call.tx_hash = read.tx_hash AND call.call_id = read.call_id
-WHERE contract = lower('0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8')
-    AND read.location not like '_[%' and location::integer > 8
+WHERE contract = lower('0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc')
+    AND location = '10'
     AND read.status = 1
     AND read.block >= 12381343
+    AND NOT EXISTS (SELECT 1 FROM ignore_interactions ii --ignore non-oracle interactions
+               WHERE ii.tx_hash = read.tx_hash)
 GROUP BY 1
-ORDER BY 1 asc;
+ORDER BY total_times_queried DESC
+LIMIT 100;
+
+-- -- -- daily queries
+-- SELECT 
+--     date_trunc('day', call.timestamp) as day, 
+--     COUNT(distinct call.from_address) as distinct_contract_sources,
+--     COUNT(distinct call.tx_hash) as daily_queries
+-- FROM EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.storage_reads read 
+-- LEFT JOIN EDW_SNOWFLAKE_SECURE_SHARE_1645732350028.raw.calls call 
+--     ON call.tx_hash = read.tx_hash AND call.call_id = read.call_id
+-- WHERE contract = lower('0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc')
+--     AND location = '10'
+--     AND read.status = 1
+--     AND read.block >= 12381343
+    -- AND NOT EXISTS (SELECT 1 FROM ignore_interactions ii --ignore non-oracle interactions
+               -- WHERE ii.tx_hash = read.tx_hash)
+-- GROUP BY 1
+-- ORDER BY 1 asc;
