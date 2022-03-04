@@ -170,7 +170,7 @@ time_univ3.plot(kind="line",
                     y = "daily total oracle calls",
                     color = 'teal',
                     title = "Uniswap TWAP ETH/USDC: Daily total calls and unique contracts making calls",
-                    # legend=False,
+                    legend=False,
                     ax = ax1twin)
 
 time_univ3.plot(kind="line", 
@@ -193,7 +193,7 @@ time_chainlink.plot(kind="line",
                     y = "daily total oracle calls",
                     title = "Chainlink Data Feed ETH/USDC: Daily total calls and unique contracts making calls",
                     color = 'teal',
-                    # legend=False,
+                    legend=False,
                     ax = ax2twin)
 
 time_chainlink.plot(kind="line", 
